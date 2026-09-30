@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { addSelection, createPokemonClient, samplePair, TOTAL_ROUNDS, TYPES } from './pokemon';
+import { addSelection, createPokemonClient, sampleUnseenPair, TOTAL_ROUNDS, TYPES } from './pokemon';
 import type { Pokemon } from './pokemon';
 import { ResultCharts } from './ResultCharts';
 import { PartyRecommendation } from './PartyRecommendation';
@@ -17,6 +17,7 @@ function App() {
   const [status, setStatus] = useState<Status>('loading');
   const [error, setError] = useState('');
   const requestId = useRef(0);
+  const displayedSpecies = useRef(new Set<string>());
   const locked = useRef(true);
   const heading = useRef<HTMLHeadingElement>(null);
   const complete = history.length === TOTAL_ROUNDS;
@@ -28,8 +29,10 @@ function App() {
     setError('');
     try {
       const species = await client.getSpecies();
-      const candidates = await Promise.all(samplePair(species).map(client.getPokemon));
+      const resources = sampleUnseenPair(species, displayedSpecies.current);
+      const candidates = await Promise.all(resources.map(client.getPokemon));
       if (current !== requestId.current) return;
+      resources.forEach(resource => displayedSpecies.current.add(resource.url));
       setPair(candidates);
       setStatus('ready');
       locked.current = false;
@@ -55,6 +58,7 @@ function App() {
   }
 
   function restart() {
+    displayedSpecies.current.clear();
     setHistory([]);
     setPair([]);
     loadPair();

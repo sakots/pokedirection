@@ -79,12 +79,18 @@ function readStats(entries: PokemonResponse['stats']): PokemonStats {
   return stats;
 }
 
-// Each round is independent. The two candidates within a round are distinct.
+// The two candidates within a round are distinct.
 export function samplePair<T>(items: readonly T[], random = Math.random): [T, T] {
   if (items.length < 2) throw new Error('候補のポケモンが足りません。');
   const first = Math.floor(random() * items.length);
   const second = Math.floor(random() * (items.length - 1));
   return [items[first], items[second >= first ? second + 1 : second]];
+}
+
+export function sampleUnseenPair<T extends { url: string }>(
+  items: readonly T[], displayed: ReadonlySet<string>, random = Math.random,
+): [T, T] {
+  return samplePair(items.filter(item => !displayed.has(item.url)), random);
 }
 
 export function addSelection<T>(history: T[], pokemon: T): T[] {

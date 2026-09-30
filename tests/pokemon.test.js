@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { samplePair, addSelection, createPokemonClient, TOTAL_ROUNDS, STAT_LABELS } from '../src/pokemon.ts';
+import { samplePair, sampleUnseenPair, addSelection, createPokemonClient, TOTAL_ROUNDS, STAT_LABELS } from '../src/pokemon.ts';
 
 test('random pairs reach every candidate without duplicates within a round', () => {
   const items = ['a', 'b', 'c', 'd'];
@@ -17,11 +17,42 @@ test('random pairs reach every candidate without duplicates within a round', () 
   assert.throws(() => samplePair(['a']));
 });
 
-test('selection ends at ten, preserving the order and allowing independent repeat encounters', () => {
+test('selection ends at ten and preserves the order', () => {
   let history = [];
   for (let i = 0; i < 12; i++) history = addSelection(history, { id: i % 3 });
   assert.equal(history.length, TOTAL_ROUNDS);
   assert.deepEqual(history.map(p => p.id), [0, 1, 2, 0, 1, 2, 0, 1, 2, 0]);
+});
+
+test('ten rounds show twenty unique species, including unchosen candidates in exclusion', () => {
+  const species = Array.from({ length: 20 }, (_, index) => ({ url: `species/${index + 1}` }));
+  const displayed = new Set();
+  const history = [];
+  for (let round = 0; round < TOTAL_ROUNDS; round++) {
+    const pair = sampleUnseenPair(species, displayed, () => 0);
+    assert.equal(pair.length, 2);
+    for (const pokemon of pair) {
+      assert.ok(!displayed.has(pokemon.url));
+      displayed.add(pokemon.url);
+    }
+    history.push(pair[0]);
+  }
+  assert.equal(displayed.size, 20);
+  assert.equal(history.length, 10);
+  assert.deepEqual(history.map(item => item.url), Array.from({ length: 10 }, (_, index) => `species/${index * 2 + 1}`));
+  assert.throws(() => sampleUnseenPair(species, displayed), /足りません/);
+  displayed.clear();
+  assert.deepEqual(sampleUnseenPair(species, displayed, () => 0), species.slice(0, 2));
+});
+
+test('drawing an unseen pair does not consume candidates until successfully displayed', () => {
+  const species = [{ url: 'species/1' }, { url: 'species/2' }, { url: 'species/3' }];
+  const displayed = new Set(['species/1']);
+  const pair = sampleUnseenPair(species, displayed, () => 0);
+  assert.deepEqual(pair, species.slice(1));
+  assert.deepEqual([...displayed], ['species/1']);
+  assert.deepEqual(sampleUnseenPair(species, displayed, () => 0), pair);
+  assert.throws(() => sampleUnseenPair(species, new Set(['species/1', 'species/2'])), /足りません/);
 });
 
 test('API client follows pagination, uses default variety and Japanese name, and caches resources', async () => {
