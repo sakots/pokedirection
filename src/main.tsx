@@ -3,6 +3,7 @@ import type { ImgHTMLAttributes } from 'react';
 import { createRoot } from 'react-dom/client';
 import { addSelection, createPokemonClient, samplePair, TOTAL_ROUNDS, TYPES } from './pokemon';
 import type { Pokemon } from './pokemon';
+import { ResultCharts } from './ResultCharts';
 import './styles.css';
 
 const client = createPokemonClient();
@@ -110,6 +111,7 @@ function App() {
             <p className="choice-note" role="status">{status === 'loading' ? '新しい2匹を読み込み中…' : '強さや相性は気にせず、あなたの「好き」で選んでください。'}</p>
           </>}
       </section>
+      {complete && <ResultCharts selections={history} />}
 
       <section className="history-section" aria-labelledby="history-heading">
         <div className="history-heading"><h2 id="history-heading"><span aria-hidden="true">♡</span> あなたの選択</h2><span>{history.length} / 10</span></div>

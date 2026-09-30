@@ -1,6 +1,14 @@
 const API = 'https://pokeapi.co/api/v2';
 export const TOTAL_ROUNDS = 10;
 
+export const STAT_LABELS = {
+  hp: 'HP', attack: 'こうげき', defense: 'ぼうぎょ',
+  'special-attack': 'とくこう', 'special-defense': 'とくぼう', speed: 'すばやさ',
+} as const;
+
+export type StatName = keyof typeof STAT_LABELS;
+export type PokemonStats = Record<StatName, number>;
+
 export const TYPES: Record<string, string> = {
   normal: 'ノーマル', fire: 'ほのお', water: 'みず', electric: 'でんき',
   grass: 'くさ', ice: 'こおり', fighting: 'かくとう', poison: 'どく',
@@ -14,6 +22,7 @@ export interface Pokemon {
   name: string;
   image: string | null;
   types: string[];
+  stats: PokemonStats;
 }
 
 export interface ApiResource {
@@ -39,6 +48,7 @@ interface PokemonResponse {
     other?: { 'official-artwork'?: { front_default: string | null } };
   };
   types: { type: ApiResource }[];
+  stats: { base_stat: number; stat: ApiResource }[];
 }
 
 type CacheStorage = Pick<Storage, 'getItem' | 'setItem'>;
@@ -96,12 +106,21 @@ export function createPokemonClient(fetcher: Fetcher = globalThis.fetch, storage
       const variety = species.varieties.find((item) => item.is_default);
       if (!variety) throw new Error('ポケモンのデータを取得できませんでした。');
       const pokemon = await get<PokemonResponse>(variety.pokemon.url);
+      const stats = {} as PokemonStats;
+      for (const name of Object.keys(STAT_LABELS) as StatName[]) {
+        const value = pokemon.stats.find(item => item.stat.name === name)?.base_stat;
+        if (value === undefined || !Number.isFinite(value) || value < 0) {
+          throw new Error('ポケモンの種族値を取得できませんでした。');
+        }
+        stats[name] = value;
+      }
       return {
         id: species.id,
         name: species.names.find((item) => item.language.name === 'ja-Hrkt')?.name
           ?? species.names.find((item) => item.language.name === 'ja')?.name ?? species.name,
         image: pokemon.sprites.other?.['official-artwork']?.front_default ?? pokemon.sprites.front_default,
         types: pokemon.types.map((item) => item.type.name),
+        stats,
       };
     },
   };

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { samplePair, addSelection, createPokemonClient, TOTAL_ROUNDS } from '../src/pokemon.ts';
+import { samplePair, addSelection, createPokemonClient, TOTAL_ROUNDS, STAT_LABELS } from '../src/pokemon.ts';
 
 test('random pairs reach every candidate without duplicates within a round', () => {
   const items = ['a', 'b', 'c', 'd'];
@@ -30,7 +30,7 @@ test('API client follows pagination, uses default variety and Japanese name, and
     'https://pokeapi.co/api/v2/pokemon-species?limit=20000': { results: [{ url: 'species/1' }], next: 'page/2' },
     'page/2': { results: [{ url: 'species/2' }], next: null },
     'species/1': { id: 1, name: 'bulbasaur', names: [{ name: 'フシギダネ', language: { name: 'ja-Hrkt' } }], varieties: [{ is_default: false, pokemon: { url: 'alternate' } }, { is_default: true, pokemon: { url: 'pokemon/1' } }] },
-    'pokemon/1': { sprites: { other: { 'official-artwork': { front_default: 'art.png' } } }, types: [{ type: { name: 'grass' } }, { type: { name: 'poison' } }] },
+    'pokemon/1': { sprites: { other: { 'official-artwork': { front_default: 'art.png' } } }, types: [{ type: { name: 'grass' } }, { type: { name: 'poison' } }], stats: Object.keys(STAT_LABELS).reverse().map(name => ({ stat: { name }, base_stat: 65 })) },
   };
   const store = new Map();
   const storage = { getItem: key => store.get(key), setItem: (key, value) => store.set(key, value) };
@@ -43,7 +43,7 @@ test('API client follows pagination, uses default variety and Japanese name, and
   const species = await client.getSpecies();
   assert.equal(species.length, 2);
   const [first, second] = await Promise.all([client.getPokemon(species[0]), client.getPokemon(species[0])]);
-  assert.deepEqual(first, { id: 1, name: 'フシギダネ', image: 'art.png', types: ['grass', 'poison'] });
+  assert.deepEqual(first, { id: 1, name: 'フシギダネ', image: 'art.png', types: ['grass', 'poison'], stats: Object.fromEntries(Object.keys(STAT_LABELS).map(name => [name, 65])) });
   assert.deepEqual(second, first);
   assert.equal(calls.length, 4);
   await createPokemonClient(fetcher, storage).getPokemon(species[0]);
