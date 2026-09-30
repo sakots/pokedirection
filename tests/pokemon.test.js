@@ -1,0 +1,61 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { samplePair, addSelection, createPokemonClient, TOTAL_ROUNDS } from '../src/pokemon.js';
+
+test('random pairs reach every candidate without duplicates within a round', () => {
+  const items = ['a', 'b', 'c', 'd'];
+  const combinations = new Set();
+  for (let first = 0; first < 4; first++) {
+    for (let second = 0; second < 3; second++) {
+      const values = [(first + 0.5) / 4, (second + 0.5) / 3];
+      const pair = samplePair(items, () => values.shift());
+      assert.notEqual(pair[0], pair[1]);
+      combinations.add(pair.join(''));
+    }
+  }
+  assert.equal(combinations.size, 12);
+  assert.throws(() => samplePair(['a']));
+});
+
+test('selection ends at ten, preserving the order and allowing independent repeat encounters', () => {
+  let history = [];
+  for (let i = 0; i < 12; i++) history = addSelection(history, { id: i % 3 });
+  assert.equal(history.length, TOTAL_ROUNDS);
+  assert.deepEqual(history.map(p => p.id), [0, 1, 2, 0, 1, 2, 0, 1, 2, 0]);
+});
+
+test('API client follows pagination, uses default variety and Japanese name, and caches resources', async () => {
+  const calls = [];
+  const fixtures = {
+    'https://pokeapi.co/api/v2/pokemon-species?limit=20000': { results: [{ url: 'species/1' }], next: 'page/2' },
+    'page/2': { results: [{ url: 'species/2' }], next: null },
+    'species/1': { id: 1, name: 'bulbasaur', names: [{ name: 'フシギダネ', language: { name: 'ja-Hrkt' } }], varieties: [{ is_default: false, pokemon: { url: 'alternate' } }, { is_default: true, pokemon: { url: 'pokemon/1' } }] },
+    'pokemon/1': { sprites: { other: { 'official-artwork': { front_default: 'art.png' } } }, types: [{ type: { name: 'grass' } }, { type: { name: 'poison' } }] },
+  };
+  const store = new Map();
+  const storage = { getItem: key => store.get(key), setItem: (key, value) => store.set(key, value) };
+  const fetcher = async url => {
+    calls.push(url);
+    assert.ok(fixtures[url], `Unexpected request: ${url}`);
+    return { ok: true, json: async () => fixtures[url] };
+  };
+  const client = createPokemonClient(fetcher, storage);
+  const species = await client.getSpecies();
+  assert.equal(species.length, 2);
+  const [first, second] = await Promise.all([client.getPokemon(species[0]), client.getPokemon(species[0])]);
+  assert.deepEqual(first, { id: 1, name: 'フシギダネ', image: 'art.png', types: ['grass', 'poison'] });
+  assert.deepEqual(second, first);
+  assert.equal(calls.length, 4);
+  await createPokemonClient(fetcher, storage).getPokemon(species[0]);
+  assert.equal(calls.length, 4);
+});
+
+test('failed requests can be retried even when persistent storage is blocked', async () => {
+  let attempts = 0;
+  const client = createPokemonClient(async () => {
+    if (++attempts === 1) return { ok: false, status: 503 };
+    return { ok: true, json: async () => ({ results: ['success'], next: null }) };
+  }, { getItem() { throw new Error('blocked'); }, setItem() { throw new Error('blocked'); } });
+  await assert.rejects(client.getSpecies());
+  assert.deepEqual(await client.getSpecies(), ['success']);
+});
