@@ -5,6 +5,7 @@ import type { PartyRequest, PartyResponse } from './party.worker';
 import { summarizeSelections } from './trends';
 import { StatsRadar } from './ResultCharts';
 import { Ball, PokemonImage } from './PokemonImage';
+import { ShareOnX } from './ShareOnX';
 
 const stats = Object.keys(STAT_LABELS) as StatName[];
 
@@ -62,6 +63,7 @@ export function PartyRecommendation({ selections, getCatalog }: {
             const role = summarizeSelections([pokemon]).supportPercent;
             return <li className="party-member" key={pokemon.id}><span className="party-number">{String(index + 1).padStart(2, '0')} <span>NO. {String(pokemon.id).padStart(4, '0')}</span></span><PokemonImage pokemon={pokemon} /><h3>{pokemon.name}</h3><div className="types">{pokemon.types.map(type => <span className={`type type-${type}`} key={type}>{TYPES[type] ?? type}</span>)}</div><span className="party-role">{role > 55 ? 'サポート寄り' : role < 45 ? 'アタッカー寄り' : 'バランス型'}</span></li>;
           })}</ol>
+          <ShareOnX party={party} />
           <div className="party-fit"><span>平均種族値の差 <strong>{statDifference.toFixed(1)}</strong></span><span>サポート比率の差 <strong>{Math.abs(actual.supportPercent - target.supportPercent).toFixed(1)}pt</strong></span></div>
           <div className="results-grid">
             <div className="results-card"><h3 className="chart-heading">目標のかたちと、6匹のかたち</h3><div className="chart-legend"><span className="legend-target">選んだ10匹の平均</span><span className="legend-party">パーティ6匹の平均</span></div><StatsRadar values={actual.averages} label="パーティ6匹の平均" comparison={{ values: target.averages, label: '選んだ10匹の平均' }} /></div>

@@ -74,6 +74,13 @@
 .comparison-table small { color: #8a9387; font-weight: 400; font-size: 10px; }
 .party-types { margin-top: 16px; }
 .party-types .comparison-table { margin-top: 13px; }
+.share-section { margin: 24px 0; text-align: center; }
+.share-x-button { display: inline-flex; align-items: center; justify-content: center; gap: 13px; padding: 12px 24px; border-radius: 8px; background: #26382d; color: #fff; font-size: 12px; text-decoration: none; transition: background .2s; }
+.share-x-button:hover { background: #496e50; }
+.x-mark { font-family: sans-serif; font-size: 20px; line-height: 1; }
+.share-preview { max-width: 540px; margin: 14px auto 0; text-align: left; font-size: 11px; }
+.share-preview summary { cursor: pointer; text-align: center; color: #64765c; }
+.share-preview p { margin: 12px 0 0; padding: 16px; background: #fff; border: 1px solid #dfe5da; border-radius: 8px; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 2; color: #52654b; }
 @media (max-width: 700px) {
   .results-heading h2 { font-size: 21px; }
   .results-card { padding: 20px; }
