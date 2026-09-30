@@ -59,3 +59,38 @@ test('failed requests can be retried even when persistent storage is blocked', a
   await assert.rejects(client.getSpecies());
   assert.deepEqual(await client.getSpecies(), ['success']);
 });
+
+test('full catalog uses one cached GraphQL POST and maps names, species IDs, stats, types', async () => {
+  let calls = 0;
+  const client = createPokemonClient(async (url, options) => {
+    calls++;
+    assert.equal(url, 'https://graphql.pokeapi.co/v1beta2');
+    assert.equal(options.method, 'POST');
+    assert.match(JSON.parse(options.body).query, /is_default/);
+    return { ok: true, json: async () => ({ data: { pokemon: [{
+      id: 25, pokemon_species_id: 25, name: 'pikachu',
+      pokemonspecy: { pokemonspeciesnames: [{ name: 'ピカチュウ', language_id: 1 }] },
+      pokemonstats: Object.keys(STAT_LABELS).map(name => ({ base_stat: 50, stat: { name } })),
+      pokemontypes: [{ type: { name: 'electric' } }],
+    }] } }) };
+  }, { getItem: () => null, setItem() {} });
+  const catalog = await client.getCatalog();
+  assert.equal(catalog[0].name, 'ピカチュウ');
+  assert.equal(catalog[0].stats.attack, 50);
+  assert.equal(catalog[0].id, 25);
+  assert.deepEqual(catalog[0].types, ['electric']);
+  assert.match(catalog[0].image, /25\.png$/);
+  await client.getCatalog();
+  assert.equal(calls, 1);
+});
+
+test('GraphQL errors with HTTP 200 are retryable and never cached', async () => {
+  let calls = 0;
+  const client = createPokemonClient(async () => ({ ok: true, json: async () => {
+    calls++;
+    return calls === 1 ? { errors: [{ message: 'Unavailable' }] } : { data: { pokemon: [] } };
+  } }), { getItem: () => null, setItem() {} });
+  await assert.rejects(client.getCatalog());
+  await assert.rejects(client.getCatalog());
+  assert.equal(calls, 2);
+});

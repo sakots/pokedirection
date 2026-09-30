@@ -1,25 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
-import type { ImgHTMLAttributes } from 'react';
 import { createRoot } from 'react-dom/client';
 import { addSelection, createPokemonClient, samplePair, TOTAL_ROUNDS, TYPES } from './pokemon';
 import type { Pokemon } from './pokemon';
 import { ResultCharts } from './ResultCharts';
+import { PartyRecommendation } from './PartyRecommendation';
+import { Ball, PokemonImage } from './PokemonImage';
 import './styles.css';
 
 const client = createPokemonClient();
-
-function Ball({ className = '' }: { className?: string }) {
-  return <span aria-hidden="true" className={`ball ${className}`}><span /></span>;
-}
-
-type PokemonImageProps = { pokemon: Pokemon } & Omit<ImgHTMLAttributes<HTMLImageElement>, 'src' | 'alt' | 'onError'>;
-
-function PokemonImage({ pokemon, ...props }: PokemonImageProps) {
-  const [failed, setFailed] = useState(false);
-  return pokemon.image && !failed
-    ? <img src={pokemon.image} alt={pokemon.name} onError={() => setFailed(true)} {...props} />
-    : <span className="image-fallback"><Ball /><span>画像がありません</span></span>;
-}
 
 type Status = 'loading' | 'ready' | 'error' | 'complete';
 
@@ -83,7 +71,7 @@ function App() {
       <section className="intro">
         <span className="eyebrow"><span /> A LITTLE POKÉMON DISCOVERY</span>
         <h1 ref={heading} tabIndex={-1}>{complete ? <>10回の「好き」が、集まりました。</> : <>直感で選ぼう。<br /><span>あなたは、どっちが好き？</span></>}</h1>
-        <p>{complete ? '出会ったポケモンの中から、あなたが選んだ10匹を振り返ってみましょう。' : <>ランダムに出会う2匹から、気になる1匹を。<br className="mobile-break" />10回の小さな選択を楽しもう。</>}</p>
+        <p>{complete ? '選んだ10匹の「好き」をもとに、6匹のパーティとあなたの傾向を見てみましょう。' : <>ランダムに出会う2匹から、気になる1匹を。<br className="mobile-break" />10回の小さな選択を楽しもう。</>}</p>
       </section>
 
       <section className="selection-area" aria-label="ポケモンの選択">
@@ -92,7 +80,7 @@ function App() {
           {Array.from({ length: 10 }, (_, i) => <span key={i} className={i < history.length ? 'filled' : ''} />)}
         </div>
 
-        {complete ? <div className="completion-panel"><span className="complete-icon">✓</span><h2>選択完了！</h2><p>あなたの「好き」を、下の履歴に並べました。</p><button className="primary-button" onClick={restart}>もう一度、出会いにいく <span aria-hidden="true">↗</span></button></div>
+        {complete ? <div className="completion-panel"><span className="complete-icon">✓</span><h2>選択完了！</h2><p>あなたの傾向から、6匹のパーティを選出します。</p><button className="primary-button" onClick={restart}>もう一度、出会いにいく <span aria-hidden="true">↗</span></button></div>
           : <>
             <div className="round-caption"><span className="round-tag">ROUND {String(history.length + 1).padStart(2, '0')}</span><span>好きなポケモンをタップして選択</span></div>
             {status === 'error' ? <div className="message-panel" role="alert"><Ball /><p>{error}</p><button className="primary-button" onClick={loadPair}>もう一度読み込む</button></div>
@@ -111,7 +99,7 @@ function App() {
             <p className="choice-note" role="status">{status === 'loading' ? '新しい2匹を読み込み中…' : '強さや相性は気にせず、あなたの「好き」で選んでください。'}</p>
           </>}
       </section>
-      {complete && <ResultCharts selections={history} />}
+      {complete && <><PartyRecommendation selections={history} getCatalog={client.getCatalog} /><ResultCharts selections={history} /></>}
 
       <section className="history-section" aria-labelledby="history-heading">
         <div className="history-heading"><h2 id="history-heading"><span aria-hidden="true">♡</span> あなたの選択</h2><span>{history.length} / 10</span></div>

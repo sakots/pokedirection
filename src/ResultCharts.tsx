@@ -23,8 +23,10 @@ function BalanceChart({ title, left, right, value, note }: {
   </div>;
 }
 
-function StatsRadar({ values, label }: { values: PokemonStats; label: string }) {
-  const scale = Math.max(50, Math.ceil(Math.max(...Object.values(values)) / 50) * 50);
+export function StatsRadar({ values, label, comparison }: {
+  values: PokemonStats; label: string; comparison?: { values: PokemonStats; label: string };
+}) {
+  const scale = Math.max(50, Math.ceil(Math.max(...Object.values(values), ...Object.values(comparison?.values ?? {})) / 50) * 50);
   function point(index: number, amount: number) {
     const angle = (index * 60 - 90) * Math.PI / 180;
     return [180 + Math.cos(angle) * 105 * amount, 150 + Math.sin(angle) * 105 * amount];
@@ -34,7 +36,7 @@ function StatsRadar({ values, label }: { values: PokemonStats; label: string }) 
   }
   const shape = stats.map((stat, index) => point(index, values[stat] / scale).join(',')).join(' ');
   return <div className="radar-wrap">
-    <svg viewBox="0 0 360 310" role="img" aria-label={`${label}の種族値。${stats.map(stat => `${STAT_LABELS[stat]} ${values[stat].toFixed(1)}`).join('、')}。軸の最大値 ${scale}。`}>
+    <svg viewBox="0 0 360 310" role="img" aria-label={`${label}の種族値。${stats.map(stat => `${STAT_LABELS[stat]} ${values[stat].toFixed(1)}`).join('、')}。${comparison ? `${comparison.label}：${stats.map(stat => `${STAT_LABELS[stat]} ${comparison.values[stat].toFixed(1)}`).join('、')}。` : ''}軸の最大値 ${scale}。`}>
       {[.25, .5, .75, 1].map(level => <polygon key={level} points={polygon(level)} className="radar-grid" />)}
       {stats.map((stat, index) => {
         const [x, y] = point(index, 1);
@@ -42,6 +44,7 @@ function StatsRadar({ values, label }: { values: PokemonStats; label: string }) 
         return <g key={stat}><line x1="180" y1="150" x2={x} y2={y} className="radar-axis" /><text x={labelX} y={labelY - 4} textAnchor="middle" className="radar-label">{STAT_LABELS[stat]}</text><text x={labelX} y={labelY + 13} textAnchor="middle" className="radar-value">{Number(values[stat].toFixed(1))}</text></g>;
       })}
       <polygon points={shape} className="radar-shape" />
+      {comparison && <polygon points={stats.map((stat, index) => point(index, comparison.values[stat] / scale).join(',')).join(' ')} className="radar-comparison" />}
       {stats.map((stat, index) => { const [x, y] = point(index, values[stat] / scale); return <circle key={stat} cx={x} cy={y} r="3" className="radar-dot" />; })}
     </svg>
     <p className="chart-note">種族値 / 軸の最大値 {scale}（表示対象に合わせて調整）</p>

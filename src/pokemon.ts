@@ -1,4 +1,5 @@
 const API = 'https://pokeapi.co/api/v2';
+const GRAPHQL = 'https://graphql.pokeapi.co/v1beta2';
 export const TOTAL_ROUNDS = 10;
 
 export const STAT_LABELS = {
@@ -54,6 +55,30 @@ interface PokemonResponse {
 type CacheStorage = Pick<Storage, 'getItem' | 'setItem'>;
 type Fetcher = (url: string, options?: RequestInit) => Promise<Pick<Response, 'ok' | 'status' | 'json'>>;
 
+interface CatalogResponse {
+  errors?: { message: string }[];
+  data?: { pokemon: {
+    id: number;
+    name: string;
+    pokemon_species_id: number;
+    pokemonspecy: { pokemonspeciesnames: { name: string; language_id: number }[] };
+    pokemonstats: PokemonResponse['stats'];
+    pokemontypes: PokemonResponse['types'];
+  }[] };
+}
+
+function readStats(entries: PokemonResponse['stats']): PokemonStats {
+  const stats = {} as PokemonStats;
+  for (const name of Object.keys(STAT_LABELS) as StatName[]) {
+    const value = entries.find(item => item.stat.name === name)?.base_stat;
+    if (value === undefined || !Number.isFinite(value) || value < 0) {
+      throw new Error('ポケモンの種族値を取得できませんでした。');
+    }
+    stats[name] = value;
+  }
+  return stats;
+}
+
 // Each round is independent. The two candidates within a round are distinct.
 export function samplePair<T>(items: readonly T[], random = Math.random): [T, T] {
   if (items.length < 2) throw new Error('候補のポケモンが足りません。');
@@ -68,29 +93,57 @@ export function addSelection<T>(history: T[], pokemon: T): T[] {
 
 export function createPokemonClient(fetcher: Fetcher = globalThis.fetch, storage: CacheStorage | undefined = globalThis.localStorage) {
   const memory = new Map<string, Promise<unknown>>();
-  async function get<T>(url: string): Promise<T> {
-    const existing = memory.get(url);
+  async function get<T>(url: string, options?: RequestInit, cacheKey = url): Promise<T> {
+    const existing = memory.get(cacheKey);
     if (existing) return await existing as T;
-    const key = `pokedirection:v1:${url}`;
+    const key = `pokedirection:v1:${cacheKey}`;
     try {
       const cached = JSON.parse(storage?.getItem(key) ?? 'null') as { time: number; data: T } | null;
       if (cached && Date.now() - cached.time < 86400000) {
-        memory.set(url, Promise.resolve(cached.data));
+        memory.set(cacheKey, Promise.resolve(cached.data));
         return cached.data;
       }
     } catch { /* Caching is optional when storage is unavailable. */ }
     const request = (async () => {
-      const response = await fetcher(url, { signal: AbortSignal.timeout(15000) });
+      const response = await fetcher(url, { ...options, signal: AbortSignal.timeout(options?.method === 'POST' ? 30000 : 15000) });
       if (!response.ok) throw new Error(`PokéAPI: ${response.status}`);
       const data: unknown = await response.json();
+      const catalog = data as CatalogResponse;
+      if (options?.method === 'POST' && (catalog.errors?.length || !catalog.data?.pokemon?.length)) {
+        throw new Error('パーティ候補を取得できませんでした。');
+      }
       try { storage?.setItem(key, JSON.stringify({ time: Date.now(), data })); } catch { /* Storage may be full. */ }
       return data;
     })();
-    memory.set(url, request);
-    try { return await request as T; } catch (error) { memory.delete(url); throw error; }
+    memory.set(cacheKey, request);
+    try { return await request as T; } catch (error) { memory.delete(cacheKey); throw error; }
   }
 
   return {
+    async getCatalog(): Promise<Pokemon[]> {
+      // One bulk query avoids thousands of REST requests for recommendation.
+      const response = await get<CatalogResponse>(GRAPHQL, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ query: `query PartyCatalog {
+          pokemon(where: {is_default: {_eq: true}}, order_by: {id: asc}, limit: 20000) {
+            id name pokemon_species_id
+            pokemonspecy { pokemonspeciesnames(where: {language_id: {_in: [1, 11]}}) { name language_id } }
+            pokemonstats { base_stat stat { name } }
+            pokemontypes { type { name } }
+          }
+        }` }),
+      }, `${GRAPHQL}:party-catalog-v1`);
+      if (!response.data?.pokemon.length) throw new Error('パーティ候補を取得できませんでした。');
+      return response.data.pokemon.map(pokemon => ({
+        id: pokemon.pokemon_species_id,
+        name: pokemon.pokemonspecy.pokemonspeciesnames.find(item => item.language_id === 1)?.name
+          ?? pokemon.pokemonspecy.pokemonspeciesnames.find(item => item.language_id === 11)?.name ?? pokemon.name,
+        image: `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/${pokemon.id}.png`,
+        types: pokemon.pokemontypes.map(item => item.type.name),
+        stats: readStats(pokemon.pokemonstats),
+      }));
+    },
     async getSpecies(): Promise<ApiResource[]> {
       const species: ApiResource[] = [];
       let url: string | null = `${API}/pokemon-species?limit=20000`;
@@ -106,14 +159,7 @@ export function createPokemonClient(fetcher: Fetcher = globalThis.fetch, storage
       const variety = species.varieties.find((item) => item.is_default);
       if (!variety) throw new Error('ポケモンのデータを取得できませんでした。');
       const pokemon = await get<PokemonResponse>(variety.pokemon.url);
-      const stats = {} as PokemonStats;
-      for (const name of Object.keys(STAT_LABELS) as StatName[]) {
-        const value = pokemon.stats.find(item => item.stat.name === name)?.base_stat;
-        if (value === undefined || !Number.isFinite(value) || value < 0) {
-          throw new Error('ポケモンの種族値を取得できませんでした。');
-        }
-        stats[name] = value;
-      }
+      const stats = readStats(pokemon.stats);
       return {
         id: species.id,
         name: species.names.find((item) => item.language.name === 'ja-Hrkt')?.name
