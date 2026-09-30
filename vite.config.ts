@@ -9,7 +9,8 @@ export default defineConfig(({ mode }) => {
     tag: 'meta', attrs: { [key]: name, content }, injectTo: 'head',
   });
   return {
-    base: urls.base,
+    // FTP uploads can place the same build at any directory depth.
+    base: './',
     plugins: [{
       name: 'pokedirection-social-metadata',
       transformIndexHtml() {
