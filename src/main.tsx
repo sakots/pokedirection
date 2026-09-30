@@ -1,29 +1,35 @@
 import React, { useEffect, useRef, useState } from 'react';
+import type { ImgHTMLAttributes } from 'react';
 import { createRoot } from 'react-dom/client';
-import { addSelection, createPokemonClient, samplePair, TOTAL_ROUNDS, TYPES } from './pokemon.js';
+import { addSelection, createPokemonClient, samplePair, TOTAL_ROUNDS, TYPES } from './pokemon';
+import type { Pokemon } from './pokemon';
 import './styles.css';
 
 const client = createPokemonClient();
 
-function Ball({ className = '' }) {
+function Ball({ className = '' }: { className?: string }) {
   return <span aria-hidden="true" className={`ball ${className}`}><span /></span>;
 }
 
-function PokemonImage({ pokemon, ...props }) {
+type PokemonImageProps = { pokemon: Pokemon } & Omit<ImgHTMLAttributes<HTMLImageElement>, 'src' | 'alt' | 'onError'>;
+
+function PokemonImage({ pokemon, ...props }: PokemonImageProps) {
   const [failed, setFailed] = useState(false);
   return pokemon.image && !failed
     ? <img src={pokemon.image} alt={pokemon.name} onError={() => setFailed(true)} {...props} />
     : <span className="image-fallback"><Ball /><span>画像がありません</span></span>;
 }
 
+type Status = 'loading' | 'ready' | 'error' | 'complete';
+
 function App() {
-  const [pair, setPair] = useState([]);
-  const [history, setHistory] = useState([]);
-  const [status, setStatus] = useState('loading');
+  const [pair, setPair] = useState<Pokemon[]>([]);
+  const [history, setHistory] = useState<Pokemon[]>([]);
+  const [status, setStatus] = useState<Status>('loading');
   const [error, setError] = useState('');
   const requestId = useRef(0);
   const locked = useRef(true);
-  const heading = useRef(null);
+  const heading = useRef<HTMLHeadingElement>(null);
   const complete = history.length === TOTAL_ROUNDS;
 
   async function loadPair() {
@@ -50,7 +56,7 @@ function App() {
     return () => { requestId.current += 1; };
   }, []);
 
-  function select(pokemon) {
+  function select(pokemon: Pokemon) {
     if (locked.current || complete) return;
     locked.current = true;
     const next = addSelection(history, pokemon);
@@ -116,4 +122,6 @@ function App() {
   </div>;
 }
 
-createRoot(document.getElementById('root')).render(<App />);
+const root = document.getElementById('root');
+if (!root) throw new Error('アプリの表示先が見つかりません。');
+createRoot(root).render(<App />);

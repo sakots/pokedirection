@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { samplePair, addSelection, createPokemonClient, TOTAL_ROUNDS } from '../src/pokemon.js';
+import { samplePair, addSelection, createPokemonClient, TOTAL_ROUNDS } from '../src/pokemon.ts';
 
 test('random pairs reach every candidate without duplicates within a round', () => {
   const items = ['a', 'b', 'c', 'd'];

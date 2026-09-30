@@ -1,7 +1,7 @@
 const API = 'https://pokeapi.co/api/v2';
 export const TOTAL_ROUNDS = 10;
 
-export const TYPES = {
+export const TYPES: Record<string, string> = {
   normal: 'ノーマル', fire: 'ほのお', water: 'みず', electric: 'でんき',
   grass: 'くさ', ice: 'こおり', fighting: 'かくとう', poison: 'どく',
   ground: 'じめん', flying: 'ひこう', psychic: 'エスパー', bug: 'むし',
@@ -9,25 +9,61 @@ export const TYPES = {
   steel: 'はがね', fairy: 'フェアリー',
 };
 
+export interface Pokemon {
+  id: number;
+  name: string;
+  image: string | null;
+  types: string[];
+}
+
+export interface ApiResource {
+  name: string;
+  url: string;
+}
+
+interface SpeciesList {
+  results: ApiResource[];
+  next: string | null;
+}
+
+interface SpeciesResponse {
+  id: number;
+  name: string;
+  names: { name: string; language: ApiResource }[];
+  varieties: { is_default: boolean; pokemon: ApiResource }[];
+}
+
+interface PokemonResponse {
+  sprites: {
+    front_default: string | null;
+    other?: { 'official-artwork'?: { front_default: string | null } };
+  };
+  types: { type: ApiResource }[];
+}
+
+type CacheStorage = Pick<Storage, 'getItem' | 'setItem'>;
+type Fetcher = (url: string, options?: RequestInit) => Promise<Pick<Response, 'ok' | 'status' | 'json'>>;
+
 // Each round is independent. The two candidates within a round are distinct.
-export function samplePair(items, random = Math.random) {
+export function samplePair<T>(items: readonly T[], random = Math.random): [T, T] {
   if (items.length < 2) throw new Error('候補のポケモンが足りません。');
   const first = Math.floor(random() * items.length);
   const second = Math.floor(random() * (items.length - 1));
   return [items[first], items[second >= first ? second + 1 : second]];
 }
 
-export function addSelection(history, pokemon) {
+export function addSelection<T>(history: T[], pokemon: T): T[] {
   return history.length < TOTAL_ROUNDS ? [...history, pokemon] : history;
 }
 
-export function createPokemonClient(fetcher = globalThis.fetch, storage = globalThis.localStorage) {
-  const memory = new Map();
-  async function get(url) {
-    if (memory.has(url)) return memory.get(url);
+export function createPokemonClient(fetcher: Fetcher = globalThis.fetch, storage: CacheStorage | undefined = globalThis.localStorage) {
+  const memory = new Map<string, Promise<unknown>>();
+  async function get<T>(url: string): Promise<T> {
+    const existing = memory.get(url);
+    if (existing) return await existing as T;
     const key = `pokedirection:v1:${url}`;
     try {
-      const cached = JSON.parse(storage?.getItem(key) ?? 'null');
+      const cached = JSON.parse(storage?.getItem(key) ?? 'null') as { time: number; data: T } | null;
       if (cached && Date.now() - cached.time < 86400000) {
         memory.set(url, Promise.resolve(cached.data));
         return cached.data;
@@ -36,30 +72,30 @@ export function createPokemonClient(fetcher = globalThis.fetch, storage = global
     const request = (async () => {
       const response = await fetcher(url, { signal: AbortSignal.timeout(15000) });
       if (!response.ok) throw new Error(`PokéAPI: ${response.status}`);
-      const data = await response.json();
+      const data: unknown = await response.json();
       try { storage?.setItem(key, JSON.stringify({ time: Date.now(), data })); } catch { /* Storage may be full. */ }
       return data;
     })();
     memory.set(url, request);
-    try { return await request; } catch (error) { memory.delete(url); throw error; }
+    try { return await request as T; } catch (error) { memory.delete(url); throw error; }
   }
 
   return {
-    async getSpecies() {
-      const species = [];
-      let url = `${API}/pokemon-species?limit=20000`;
+    async getSpecies(): Promise<ApiResource[]> {
+      const species: ApiResource[] = [];
+      let url: string | null = `${API}/pokemon-species?limit=20000`;
       while (url) {
-        const page = await get(url);
+        const page: SpeciesList = await get<SpeciesList>(url);
         species.push(...page.results);
         url = page.next;
       }
       return species;
     },
-    async getPokemon(resource) {
-      const species = await get(resource.url);
+    async getPokemon(resource: ApiResource): Promise<Pokemon> {
+      const species = await get<SpeciesResponse>(resource.url);
       const variety = species.varieties.find((item) => item.is_default);
       if (!variety) throw new Error('ポケモンのデータを取得できませんでした。');
-      const pokemon = await get(variety.pokemon.url);
+      const pokemon = await get<PokemonResponse>(variety.pokemon.url);
       return {
         id: species.id,
         name: species.names.find((item) => item.language.name === 'ja-Hrkt')?.name
